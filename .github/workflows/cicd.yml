@@ -1,0 +1,82 @@
+name: Web & API CI/CD
+
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
+  workflow_dispatch:
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.changes.outputs.web }}
+      api: ${{ steps.changes.outputs.api }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Ensures we have at least two commits
+
+      - name: Debug File Changes
+        run: |
+          echo "Comparing ${{ github.event.before }} with ${{ github.sha }}"
+          git diff --name-only ${{ github.event.before }} ${{ github.sha }}
+
+      - name: Detect Changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ github.event.before }}  # Use last commit
+          filters: |
+            api:
+              - 'api/**'
+            web:
+              - 'web/**'
+
+      - name: Debug Outputs
+        run: |
+          echo "API changed: ${{ steps.changes.outputs.api }}"
+          echo "WEB changed: ${{ steps.changes.outputs.web }}"
+
+  build-and-deploy-api:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.api == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build API Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/devops-api:v1.${{ github.run_number }} ./api
+          echo "devops-api:v1.${{ github.run_number }} "
+
+      - name: Push API Docker Image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/devops-api:v1.${{ github.run_number }}
+
+
+  build-and-deploy-web:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.web == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build Web Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/devops-web:v1.${{ github.run_number }} ./web
+          echo "devops-web:v1.${{ github.run_number }} "
+
+      - name: Push API Docker Image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/devops-web:v1.${{ github.run_number }}
