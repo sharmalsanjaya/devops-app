@@ -3,5 +3,6 @@ terraform {
     bucket     = "sshtf-bucket"
     key        = "key/terraform.tfstate"
     region     = "us-east-1"
+    
   }
 }
